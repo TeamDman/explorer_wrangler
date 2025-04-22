@@ -1,12 +1,3 @@
-pub mod add_system_tray;
-pub mod add_system_tray_entry;
-pub mod add_taskbar;
-pub mod config;
-pub mod get_config;
 pub mod init;
-pub mod set_taskbar_remote;
-pub mod system_tray;
-pub mod system_tray_entry;
 pub mod taskbar;
-pub mod taskbar_remote_kind;
-pub mod update_taskbar;
+pub mod sync_taskbars;

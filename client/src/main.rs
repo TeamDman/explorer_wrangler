@@ -36,11 +36,9 @@ fn main() -> eyre::Result<()> {
     //Run connection in thread
     connection.run_threaded();
 
-    // Call reducer
-    sync_taskbars(&connection);
-
     // Main program loop or other logic here
     loop {
+        sync_taskbars(&connection);
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }
@@ -80,19 +78,11 @@ fn on_sub_error(_err_ctx: &ErrorContext, err: spacetimedb_sdk::Error) {
 }
 
 // Calling reducer functions
-fn sync_taskbars(connection: &DbConnection) {
-    for windows_taskbar in get_taskbars().unwrap() {
-        let taskbar: Taskbar = windows_taskbar.into();
-        connection
-            .reducers
-            .add_taskbar(
-                taskbar.id,
-                taskbar.width,
-                taskbar.height,
-                taskbar.x,
-                taskbar.y,
-            )
-            .unwrap();
-        log::info!("Added Taskbar!");
-    }
+fn sync_taskbars(connection: &DbConnection) -> eyre::Result<()> {
+    let taskbars = get_taskbars()?;
+    connection
+        .reducers
+        .sync_taskbars(taskbars.into_iter().map(|x| x.into()).collect())?;
+    log::info!("Synced taskbars!");
+    Ok(())
 }

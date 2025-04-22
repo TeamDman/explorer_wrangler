@@ -2,7 +2,6 @@
 // WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
 
 #![allow(unused, clippy::all)]
-use super::taskbar_remote_kind_type::TaskbarRemoteKind;
 use super::taskbar_type::Taskbar;
 use spacetimedb_sdk::__codegen::__lib;
 use spacetimedb_sdk::__codegen::__sats;
@@ -85,7 +84,7 @@ impl<'ctx> __sdk::Table for TaskbarTableHandle<'ctx> {
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<Taskbar>("taskbar");
-    _table.add_unique_constraint::<__sdk::Identity>("id", |row| &row.id);
+    _table.add_unique_constraint::<u32>("id", |row| &row.id);
 }
 pub struct TaskbarUpdateCallbackId(__sdk::CallbackId);
 
@@ -123,7 +122,7 @@ pub(super) fn parse_table_update(
 /// but to directly chain method calls,
 /// like `ctx.db.taskbar().id().find(...)`.
 pub struct TaskbarIdUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<Taskbar, __sdk::Identity>,
+    imp: __sdk::UniqueConstraintHandle<Taskbar, u32>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -131,7 +130,7 @@ impl<'ctx> TaskbarTableHandle<'ctx> {
     /// Get a handle on the `id` unique index on the table `taskbar`.
     pub fn id(&self) -> TaskbarIdUnique<'ctx> {
         TaskbarIdUnique {
-            imp: self.imp.get_unique_constraint::<__sdk::Identity>("id"),
+            imp: self.imp.get_unique_constraint::<u32>("id"),
             phantom: std::marker::PhantomData,
         }
     }
@@ -140,7 +139,7 @@ impl<'ctx> TaskbarTableHandle<'ctx> {
 impl<'ctx> TaskbarIdUnique<'ctx> {
     /// Find the subscribed row whose `id` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &__sdk::Identity) -> Option<Taskbar> {
+    pub fn find(&self, col_val: &u32) -> Option<Taskbar> {
         self.imp.find(col_val)
     }
 }

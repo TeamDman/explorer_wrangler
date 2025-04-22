@@ -7,17 +7,16 @@ use spacetimedb_sdk::__codegen::__sats;
 use spacetimedb_sdk::__codegen::__ws;
 use spacetimedb_sdk::__codegen::{self as __sdk};
 
-use super::taskbar_remote_kind_type::TaskbarRemoteKind;
-
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct Taskbar {
-    pub id: __sdk::Identity,
-    pub remote: TaskbarRemoteKind,
+    pub id: u32,
+    pub is_secondary: bool,
     pub width: u32,
     pub height: u32,
     pub x: i32,
     pub y: i32,
+    pub apps: Vec<String>,
 }
 
 impl __sdk::InModule for Taskbar {

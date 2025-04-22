@@ -1,17 +1,15 @@
 use spacetimedb::table;
-use spacetimedb::Identity;
 
-use crate::taskbar_remote_kind::TaskbarRemoteKind;
-
-pub type TaskbarId = Identity;
+pub type TaskbarId = u32;
 
 #[table(name = taskbar, public)]
 pub struct Taskbar {
     #[primary_key]
     pub id: TaskbarId,
-    pub remote: TaskbarRemoteKind,
+    pub is_secondary: bool,
     pub width: u32,
     pub height: u32,
     pub x: i32,
     pub y: i32,
+    pub apps: Vec<String>,
 }

@@ -7,45 +7,15 @@ use spacetimedb_sdk::__codegen::__sats;
 use spacetimedb_sdk::__codegen::__ws;
 use spacetimedb_sdk::__codegen::{self as __sdk};
 
-pub mod add_system_tray_entry_reducer;
-pub mod add_system_tray_reducer;
-pub mod add_taskbar_reducer;
-pub mod config_table;
-pub mod config_type;
-pub mod set_taskbar_remote_reducer;
-pub mod system_tray_entry_table;
-pub mod system_tray_entry_type;
-pub mod system_tray_table;
-pub mod system_tray_type;
-pub mod taskbar_remote_kind_type;
+pub mod sync_taskbars_reducer;
 pub mod taskbar_table;
 pub mod taskbar_type;
-pub mod update_taskbar_reducer;
 
-pub use add_system_tray_entry_reducer::add_system_tray_entry;
-pub use add_system_tray_entry_reducer::set_flags_for_add_system_tray_entry;
-pub use add_system_tray_entry_reducer::AddSystemTrayEntryCallbackId;
-pub use add_system_tray_reducer::add_system_tray;
-pub use add_system_tray_reducer::set_flags_for_add_system_tray;
-pub use add_system_tray_reducer::AddSystemTrayCallbackId;
-pub use add_taskbar_reducer::add_taskbar;
-pub use add_taskbar_reducer::set_flags_for_add_taskbar;
-pub use add_taskbar_reducer::AddTaskbarCallbackId;
-pub use config_table::*;
-pub use config_type::Config;
-pub use set_taskbar_remote_reducer::set_flags_for_set_taskbar_remote;
-pub use set_taskbar_remote_reducer::set_taskbar_remote;
-pub use set_taskbar_remote_reducer::SetTaskbarRemoteCallbackId;
-pub use system_tray_entry_table::*;
-pub use system_tray_entry_type::SystemTrayEntry;
-pub use system_tray_table::*;
-pub use system_tray_type::SystemTray;
-pub use taskbar_remote_kind_type::TaskbarRemoteKind;
+pub use sync_taskbars_reducer::set_flags_for_sync_taskbars;
+pub use sync_taskbars_reducer::sync_taskbars;
+pub use sync_taskbars_reducer::SyncTaskbarsCallbackId;
 pub use taskbar_table::*;
 pub use taskbar_type::Taskbar;
-pub use update_taskbar_reducer::set_flags_for_update_taskbar;
-pub use update_taskbar_reducer::update_taskbar;
-pub use update_taskbar_reducer::UpdateTaskbarCallbackId;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -55,34 +25,7 @@ pub use update_taskbar_reducer::UpdateTaskbarCallbackId;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
-    AddSystemTray {
-        system_tray_id: __sdk::Identity,
-        taskbar_id: __sdk::Identity,
-    },
-    AddSystemTrayEntry {
-        system_tray_entry_id: __sdk::Identity,
-        system_tray_id: __sdk::Identity,
-        icon: String,
-        tooltip: String,
-        text: String,
-    },
-    AddTaskbar {
-        taskbar_id: __sdk::Identity,
-        width: u32,
-        height: u32,
-        x: i32,
-        y: i32,
-    },
-    SetTaskbarRemote {
-        remote: TaskbarRemoteKind,
-    },
-    UpdateTaskbar {
-        id: __sdk::Identity,
-        width: u32,
-        height: u32,
-        x: i32,
-        y: i32,
-    },
+    SyncTaskbars { taskbars: Vec<Taskbar> },
 }
 
 impl __sdk::InModule for Reducer {
@@ -92,11 +35,7 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
-            Reducer::AddSystemTray { .. } => "add_system_tray",
-            Reducer::AddSystemTrayEntry { .. } => "add_system_tray_entry",
-            Reducer::AddTaskbar { .. } => "add_taskbar",
-            Reducer::SetTaskbarRemote { .. } => "set_taskbar_remote",
-            Reducer::UpdateTaskbar { .. } => "update_taskbar",
+            Reducer::SyncTaskbars { .. } => "sync_taskbars",
         }
     }
 }
@@ -104,28 +43,9 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
     type Error = __sdk::Error;
     fn try_from(value: __ws::ReducerCallInfo<__ws::BsatnFormat>) -> __sdk::Result<Self> {
         match &value.reducer_name[..] {
-            "add_system_tray" => Ok(__sdk::parse_reducer_args::<
-                add_system_tray_reducer::AddSystemTrayArgs,
-            >("add_system_tray", &value.args)?
-            .into()),
-            "add_system_tray_entry" => Ok(__sdk::parse_reducer_args::<
-                add_system_tray_entry_reducer::AddSystemTrayEntryArgs,
-            >("add_system_tray_entry", &value.args)?
-            .into()),
-            "add_taskbar" => Ok(
-                __sdk::parse_reducer_args::<add_taskbar_reducer::AddTaskbarArgs>(
-                    "add_taskbar",
-                    &value.args,
-                )?
-                .into(),
-            ),
-            "set_taskbar_remote" => Ok(__sdk::parse_reducer_args::<
-                set_taskbar_remote_reducer::SetTaskbarRemoteArgs,
-            >("set_taskbar_remote", &value.args)?
-            .into()),
-            "update_taskbar" => Ok(__sdk::parse_reducer_args::<
-                update_taskbar_reducer::UpdateTaskbarArgs,
-            >("update_taskbar", &value.args)?
+            "sync_taskbars" => Ok(__sdk::parse_reducer_args::<
+                sync_taskbars_reducer::SyncTaskbarsArgs,
+            >("sync_taskbars", &value.args)?
             .into()),
             unknown => {
                 Err(
@@ -141,9 +61,6 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
-    config: __sdk::TableUpdate<Config>,
-    system_tray: __sdk::TableUpdate<SystemTray>,
-    system_tray_entry: __sdk::TableUpdate<SystemTrayEntry>,
     taskbar: __sdk::TableUpdate<Taskbar>,
 }
 
@@ -153,14 +70,6 @@ impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in raw.tables {
             match &table_update.table_name[..] {
-                "config" => db_update.config = config_table::parse_table_update(table_update)?,
-                "system_tray" => {
-                    db_update.system_tray = system_tray_table::parse_table_update(table_update)?
-                }
-                "system_tray_entry" => {
-                    db_update.system_tray_entry =
-                        system_tray_entry_table::parse_table_update(table_update)?
-                }
                 "taskbar" => db_update.taskbar = taskbar_table::parse_table_update(table_update)?,
 
                 unknown => {
@@ -188,15 +97,6 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
-        diff.config = cache
-            .apply_diff_to_table::<Config>("config", &self.config)
-            .with_updates_by_pk(|row| &row.id);
-        diff.system_tray = cache
-            .apply_diff_to_table::<SystemTray>("system_tray", &self.system_tray)
-            .with_updates_by_pk(|row| &row.system_tray_id);
-        diff.system_tray_entry = cache
-            .apply_diff_to_table::<SystemTrayEntry>("system_tray_entry", &self.system_tray_entry)
-            .with_updates_by_pk(|row| &row.id);
         diff.taskbar = cache
             .apply_diff_to_table::<Taskbar>("taskbar", &self.taskbar)
             .with_updates_by_pk(|row| &row.id);
@@ -209,9 +109,6 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
-    config: __sdk::TableAppliedDiff<'r, Config>,
-    system_tray: __sdk::TableAppliedDiff<'r, SystemTray>,
-    system_tray_entry: __sdk::TableAppliedDiff<'r, SystemTrayEntry>,
     taskbar: __sdk::TableAppliedDiff<'r, Taskbar>,
 }
 
@@ -225,13 +122,6 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
-        callbacks.invoke_table_row_callbacks::<Config>("config", &self.config, event);
-        callbacks.invoke_table_row_callbacks::<SystemTray>("system_tray", &self.system_tray, event);
-        callbacks.invoke_table_row_callbacks::<SystemTrayEntry>(
-            "system_tray_entry",
-            &self.system_tray_entry,
-            event,
-        );
         callbacks.invoke_table_row_callbacks::<Taskbar>("taskbar", &self.taskbar, event);
     }
 }
@@ -808,9 +698,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type SubscriptionHandle = SubscriptionHandle;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
-        config_table::register_table(client_cache);
-        system_tray_table::register_table(client_cache);
-        system_tray_entry_table::register_table(client_cache);
         taskbar_table::register_table(client_cache);
     }
 }
