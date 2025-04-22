@@ -38,7 +38,7 @@ fn main() -> eyre::Result<()> {
 
     // Main program loop or other logic here
     loop {
-        sync_taskbars(&connection);
+        sync_taskbars(&connection)?;
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }

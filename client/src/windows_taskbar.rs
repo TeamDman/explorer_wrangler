@@ -1,5 +1,6 @@
 use crate::module_bindings::Taskbar;
 
+#[derive(Debug)]
 pub struct WindowsTaskbar {
     pub id: u32,
     pub rect: windows::Win32::Foundation::RECT,
