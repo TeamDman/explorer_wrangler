@@ -1,0 +1,1 @@
+spacetime generate --lang rust --out-dir ..\client\src\module_bindings\

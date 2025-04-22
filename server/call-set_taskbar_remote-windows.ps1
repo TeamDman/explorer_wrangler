@@ -1,0 +1,1 @@
+spacetime call explorer-wrangler set_taskbar_remote '{"Windows":{}}'
