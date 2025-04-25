@@ -1,28 +1,58 @@
+use chrono::DateTime;
+use chrono::Local;
 use once_cell::sync::Lazy;
-use windows::Win32::UI::Accessibility::UnhookWinEvent;
+use tracing::trace;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use tracing::debug;
+use tracing::info;
+use tracing::level_filters::LevelFilter;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
 use windows::Win32::UI::Accessibility::SetWinEventHook;
+use windows::Win32::UI::Accessibility::UnhookWinEvent;
+use windows::Win32::UI::WindowsAndMessaging::DispatchMessageW;
 use windows::Win32::UI::WindowsAndMessaging::EVENT_OBJECT_LOCATIONCHANGE;
 use windows::Win32::UI::WindowsAndMessaging::EVENT_OBJECT_NAMECHANGE;
 use windows::Win32::UI::WindowsAndMessaging::EnumWindows;
+use windows::Win32::UI::WindowsAndMessaging::GetMessageW;
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 use windows::Win32::UI::WindowsAndMessaging::GetWindowTextLengthW;
 use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
 use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+use windows::Win32::UI::WindowsAndMessaging::MSG;
+use windows::Win32::UI::WindowsAndMessaging::TranslateMessage;
 use windows::Win32::UI::WindowsAndMessaging::WINEVENT_OUTOFCONTEXT;
 use windows::Win32::UI::WindowsAndMessaging::WINEVENT_SKIPOWNPROCESS;
 use windows::core::BOOL;
 
+pub enum InvocationCacheStrategy {
+    CacheFor5Seconds,
+}
+
 struct WindowInfo {
-    rect: RECT,
-    title: String,
+    rect: Option<RECT>,
+    title: Option<String>,
+    timestamp: DateTime<Local>,
+}
+
+pub enum EnumerationResult {
+    ContinueEnumeration,
+    StopEnumeration,
+}
+
+/// https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633498(v=vs.85)#return-value
+impl From<EnumerationResult> for BOOL {
+    fn from(result: EnumerationResult) -> Self {
+        match result {
+            EnumerationResult::ContinueEnumeration => BOOL(1),
+            EnumerationResult::StopEnumeration => BOOL(0),
+        }
+    }
 }
 
 // Global cache: HWND → (RECT, title)
@@ -30,29 +60,49 @@ static WINDOWS: Lazy<Mutex<HashMap<isize, WindowInfo>>> = Lazy::new(|| Mutex::ne
 
 /// Initial enumeration of all top‐level visible windows
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, _lparam: LPARAM) -> BOOL {
+    debug!("Gathering info for window with hwnd: {:?}", hwnd);
     unsafe {
-        if IsWindowVisible(hwnd).ok().is_err() {
-            return BOOL(1);
+        if !IsWindowVisible(hwnd).as_bool() {
+            return EnumerationResult::ContinueEnumeration.into();
         }
-        let mut rect = RECT::default();
-        if GetWindowRect(hwnd, &mut rect).is_ok() {
-            let len = GetWindowTextLengthW(hwnd);
-            let mut title = String::new();
-            if len > 0 {
-                let mut buf = vec![0u16; (len + 1) as usize];
-                let copied = GetWindowTextW(hwnd, &mut buf);
-                if copied > 0 {
-                    buf.truncate(copied as usize);
-                    title = String::from_utf16_lossy(&buf);
-                }
-            }
-            WINDOWS
-                .lock()
-                .unwrap()
-                .insert(hwnd.0 as isize, WindowInfo { rect, title });
-        }
-        BOOL(1)
+        let rect = get_window_rect(hwnd);
+        let title = get_window_title(hwnd);
+        WINDOWS.lock().unwrap().insert(
+            hwnd.0 as isize,
+            WindowInfo {
+                rect,
+                title,
+                timestamp: Local::now(),
+            },
+        );
+        return EnumerationResult::ContinueEnumeration.into();
     }
+}
+
+fn get_window_rect(hwnd: HWND) -> Option<RECT> {
+    let rect = {
+        let mut rect = RECT::default();
+        if !unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+            None
+        } else {
+            Some(rect)
+        }
+    };
+    rect
+}
+
+fn get_window_title(hwnd: HWND) -> Option<String> {
+    let len = unsafe { GetWindowTextLengthW(hwnd) };
+    let mut title = None;
+    if len > 0 {
+        let mut buf = vec![0u16; (len + 1) as usize];
+        let copied = unsafe { GetWindowTextW(hwnd, &mut buf) };
+        if copied > 0 {
+            buf.truncate(copied as usize);
+            title = Some(String::from_utf16_lossy(&buf));
+        }
+    }
+    title
 }
 
 /// WinEvent callback: only location‐ or name‐change on top‐level windows
@@ -65,6 +115,10 @@ unsafe extern "system" fn win_event_proc(
     _thread_id: u32,
     _time: u32,
 ) {
+    trace!(
+        "WinEvent: hwnd: {:?}, event: {}, id_object: {}, id_child: {}",
+        hwnd, event, id_object, id_child
+    );
     // filter out non‐window or child events
     if hwnd.is_invalid() || id_object != 0 || id_child != 0 {
         return;
@@ -79,28 +133,31 @@ unsafe extern "system" fn win_event_proc(
         return;
     }
     // otherwise re‐query its rect & title
-    let mut rect = RECT::default();
-    if unsafe { GetWindowRect(hwnd, &mut rect) }.ok().is_none() {
-        return;
-    }
-    let len = unsafe { GetWindowTextLengthW(hwnd) };
-    let mut title = String::new();
-    if len > 0 {
-        let mut buf = vec![0u16; (len + 1) as usize];
-        let copied = unsafe { GetWindowTextW(hwnd, &mut buf) };
-        if copied > 0 {
-            buf.truncate(copied as usize);
-            title = String::from_utf16_lossy(&buf);
-        }
-    }
-    WINDOWS
-        .lock()
-        .unwrap()
-        .insert(hwnd.0 as isize, WindowInfo { rect, title });
+    let rect = get_window_rect(hwnd);
+    let title = get_window_title(hwnd);
+    info!(
+        "Window changed: hwnd: {:?}, rect: {:?}, title: {:?}",
+        hwnd, rect, title
+    );
+    WINDOWS.lock().unwrap().insert(
+        hwnd.0 as isize,
+        WindowInfo {
+            rect,
+            title,
+            timestamp: Local::now(),
+        },
+    );
 }
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_level(true)
+        .with_line_number(true)
+        .with_file(true)
+        .with_max_level(LevelFilter::DEBUG)
+        .init();
 
     // 1) seed our cache
     unsafe {
@@ -120,6 +177,7 @@ fn main() -> eyre::Result<()> {
         )
     };
 
+    
     // 3) spawn a thread that prints our cache every 500 ms
     thread::spawn(|| {
         loop {
@@ -128,22 +186,38 @@ fn main() -> eyre::Result<()> {
             println!("-- Window List --");
             for (hwnd, info) in map.iter() {
                 println!(
-                    "HWND: 0x{:X}, Pos: ({}, {}, {}, {}), Title: \"{}\"",
+                    "HWND: 0x{:X}, Pos: {}, Title: \"{:?}\"",
                     hwnd,
-                    info.rect.left,
-                    info.rect.top,
-                    info.rect.right,
-                    info.rect.bottom,
+                    if let Some(rect) = info.rect {
+                        format!(
+                            "({}, {}, {}, {})",
+                            rect.left, rect.top, rect.right, rect.bottom,
+                        )
+                    } else {
+                        format!("(unknown)")
+                    },
                     info.title
                 );
             }
         }
     });
 
-    // 4) keep the main thread alive
-    thread::park();
+
+    // 4) enter the message loop
+    let mut msg = MSG::default();
+    loop {
+        // Block until a message is received.
+        if !unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
+            break;
+        }
+        info!("Message received: {:?}", msg);
+        unsafe { TranslateMessage(&msg) }.ok()?;
+        unsafe { DispatchMessageW(&msg) };
+    }
 
     // never reached in this example, but good hygiene:
-    unsafe { UnhookWinEvent(hook).unwrap(); }
+    unsafe {
+        UnhookWinEvent(hook).unwrap();
+    }
     Ok(())
 }
