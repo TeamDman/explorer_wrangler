@@ -1,1 +1,0 @@
-spacetime publish explorer-wrangler --delete-data
