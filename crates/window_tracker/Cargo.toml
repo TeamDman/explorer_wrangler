@@ -9,12 +9,16 @@ repository.workspace = true
 windows = { version = "0.61.1", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Accessibility"
+    "Win32_UI_Accessibility",
+    "Win32_System",
+    "Win32_System_Threading",
 ] }
 once_cell = "1.17"
 eyre = "0.6.12"
 chrono = "0.4.40"
 tracing = "0.1.41"
+bevy_math = "0.16.0"
+
 
 [dev-dependencies]
 color-eyre = "0.6.3"

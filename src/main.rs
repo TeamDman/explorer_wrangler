@@ -12,8 +12,14 @@ fn main() -> eyre::Result<()> {
         .init();
 
     let window_tracker = WindowTracker::new()?;
+    let mut old = window_tracker.windows();
     loop {
+        let new = window_tracker.windows();
         std::thread::sleep(std::time::Duration::from_millis(500));
+        if new == old {
+            continue;
+        }
         println!("{}", window_tracker);
+        old = new;
     }
 }
