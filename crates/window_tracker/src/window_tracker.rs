@@ -9,7 +9,6 @@ use std::sync::Mutex;
 use std::sync::mpsc::channel;
 use std::thread::JoinHandle;
 use std::thread::{self};
-use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use windows::Win32::Foundation::HWND;
@@ -150,7 +149,7 @@ impl Drop for WindowTracker {
 
 /// Callback for EnumWindows to seed the initial cache.
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, _: LPARAM) -> BOOL {
-    debug!("enum_windows_proc: {:?}", hwnd);
+    trace!("enum_windows_proc: {:?}", hwnd);
     if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
         return BOOL(1);
     }
